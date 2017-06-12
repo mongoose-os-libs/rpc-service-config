@@ -4,13 +4,11 @@
  */
 
 #include "mgos_service_config.h"
-
-#if MGOS_ENABLE_RPC
+#include "mgos_rpc.h"
 
 #include "common/mg_str.h"
 #include "fw/src/mgos_config.h"
 #include "fw/src/mgos_hal.h"
-#include "fw/src/mgos_rpc.h"
 #include "fw/src/mgos_sys_config.h"
 #include "fw/src/mgos_utils.h"
 #include "fw/src/mgos_wifi.h"
@@ -153,5 +151,3 @@ bool mgos_rpc_service_config_init(void) {
                      NULL);
   return true;
 }
-
-#endif /* MGOS_ENABLE_RPC */

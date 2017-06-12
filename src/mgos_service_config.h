@@ -6,8 +6,6 @@
 #ifndef CS_FW_SRC_MGOS_SERVICE_CONFIG_H_
 #define CS_FW_SRC_MGOS_SERVICE_CONFIG_H_
 
-#if MGOS_ENABLE_RPC
-
 #include <stdbool.h>
 
 #include "fw/src/mgos_init.h"
@@ -25,5 +23,4 @@ bool mgos_rpc_service_config_init(void);
 }
 #endif /* __cplusplus */
 
-#endif /* MGOS_ENABLE_RPC */
 #endif /* CS_FW_SRC_MGOS_SERVICE_CONFIG_H_ */
