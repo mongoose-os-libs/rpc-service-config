@@ -84,10 +84,8 @@ static void mgos_config_set_handler(struct mg_rpc_request_info *ri,
   }
 
   json_scanf(args.p, args.len, ri->args_fmt, set_handler, NULL);
-
-  mg_rpc_send_responsef(ri, NULL);
+  mg_rpc_send_errorf(ri, 0, NULL);
   ri = NULL;
-
   (void) cb_arg;
 }
 
@@ -130,7 +128,7 @@ static void mgos_config_save_handler(struct mg_rpc_request_info *ri,
   } else
 #endif
   {
-    mg_rpc_send_responsef(ri, NULL);
+    mg_rpc_send_errorf(ri, 0, NULL);
   }
   ri = NULL;
 
