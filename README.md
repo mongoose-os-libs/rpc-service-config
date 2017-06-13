@@ -1,4 +1,4 @@
-# RPC Config Service
+# RPC Service - Config
 
 This service provides an ability to manage device configuration remotely.
 It is required by the `mos config-get` and `mos config-set` commands.
