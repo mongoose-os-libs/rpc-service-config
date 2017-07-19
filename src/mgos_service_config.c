@@ -7,11 +7,11 @@
 #include "mgos_rpc.h"
 
 #include "common/mg_str.h"
-#include "fw/src/mgos_config.h"
-#include "fw/src/mgos_hal.h"
-#include "fw/src/mgos_sys_config.h"
-#include "fw/src/mgos_utils.h"
-#include "fw/src/mgos_wifi.h"
+#include "mgos_config.h"
+#include "mgos_hal.h"
+#include "mgos_sys_config.h"
+#include "mgos_utils.h"
+#include "mgos_wifi.h"
 
 #if CS_PLATFORM == CS_P_ESP8266
 #include "fw/platforms/esp8266/src/esp_gpio.h"

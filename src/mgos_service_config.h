@@ -8,7 +8,7 @@
 
 #include <stdbool.h>
 
-#include "fw/src/mgos_init.h"
+#include "mgos_init.h"
 
 #ifdef __cplusplus
 extern "C" {
