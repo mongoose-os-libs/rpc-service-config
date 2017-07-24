@@ -11,7 +11,6 @@
 #include "mgos_hal.h"
 #include "mgos_sys_config.h"
 #include "mgos_utils.h"
-#include "mgos_wifi.h"
 
 #if CS_PLATFORM == CS_P_ESP8266
 #include "fw/platforms/esp8266/src/esp_gpio.h"
