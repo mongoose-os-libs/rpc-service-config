@@ -7,7 +7,7 @@
 #include "mgos_rpc.h"
 
 #include "common/mg_str.h"
-#include "mgos_config.h"
+#include "mgos_config_util.h"
 #include "mgos_hal.h"
 #include "mgos_sys_config.h"
 #include "mgos_utils.h"
@@ -26,15 +26,14 @@ static void mgos_config_get_handler(struct mg_rpc_request_info *ri,
     return;
   }
 
-  struct sys_config *cfg = get_cfg();
-  const struct mgos_conf_entry *schema = sys_config_schema();
+  const struct mgos_conf_entry *schema = mgos_config_schema();
   struct mbuf send_mbuf;
   mbuf_init(&send_mbuf, 0);
 
   char *key = NULL;
   json_scanf(args.p, args.len, ri->args_fmt, &key);
   if (key != NULL) {
-    schema = mgos_conf_find_schema_entry(key, sys_config_schema());
+    schema = mgos_conf_find_schema_entry(key, mgos_config_schema());
     free(key);
     if (schema == NULL) {
       mg_rpc_send_errorf(ri, 404, "invalid config key");
@@ -42,7 +41,8 @@ static void mgos_config_get_handler(struct mg_rpc_request_info *ri,
     }
   }
 
-  mgos_conf_emit_cb(cfg, NULL, schema, false, &send_mbuf, NULL, NULL);
+  mgos_conf_emit_cb(&mgos_sys_config, NULL, schema, false, &send_mbuf, NULL,
+                    NULL);
 
   /*
    * TODO(dfrank): figure out why frozen handles %.*s incorrectly here,
@@ -91,7 +91,6 @@ static void mgos_config_save_handler(struct mg_rpc_request_info *ri,
    * We need to stash mg_rpc pointer since we need to use it after calling
    * mg_rpc_send_responsef(), which invalidates `ri`
    */
-  struct sys_config *cfg = get_cfg();
   char *msg = NULL;
   int reboot = 0;
 
@@ -101,7 +100,7 @@ static void mgos_config_save_handler(struct mg_rpc_request_info *ri,
     return;
   }
 
-  if (!save_cfg(cfg, &msg)) {
+  if (!save_cfg(&mgos_sys_config, &msg)) {
     mg_rpc_send_errorf(ri, -1, "error saving config: %s", (msg ? msg : ""));
     ri = NULL;
     free(msg);
