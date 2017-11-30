@@ -20,12 +20,6 @@
 static void mgos_config_get_handler(struct mg_rpc_request_info *ri,
                                     void *cb_arg, struct mg_rpc_frame_info *fi,
                                     struct mg_str args) {
-  if (!fi->channel_is_trusted) {
-    mg_rpc_send_errorf(ri, 403, "unauthorized");
-    ri = NULL;
-    return;
-  }
-
   const struct mgos_conf_entry *schema = mgos_config_schema();
   struct mbuf send_mbuf;
   mbuf_init(&send_mbuf, 0);
@@ -56,6 +50,7 @@ static void mgos_config_get_handler(struct mg_rpc_request_info *ri,
 
   (void) cb_arg;
   (void) args;
+  (void) fi;
 }
 
 /*
@@ -71,16 +66,11 @@ static void set_handler(const char *str, int len, void *user_data) {
 static void mgos_config_set_handler(struct mg_rpc_request_info *ri,
                                     void *cb_arg, struct mg_rpc_frame_info *fi,
                                     struct mg_str args) {
-  if (!fi->channel_is_trusted) {
-    mg_rpc_send_errorf(ri, 403, "unauthorized");
-    ri = NULL;
-    return;
-  }
-
   json_scanf(args.p, args.len, ri->args_fmt, set_handler, NULL);
   mg_rpc_send_responsef(ri, NULL);
   ri = NULL;
   (void) cb_arg;
+  (void) fi;
 }
 
 /* Handler for Config.Save */
@@ -93,12 +83,6 @@ static void mgos_config_save_handler(struct mg_rpc_request_info *ri,
    */
   char *msg = NULL;
   int reboot = 0;
-
-  if (!fi->channel_is_trusted) {
-    mg_rpc_send_errorf(ri, 403, "unauthorized");
-    ri = NULL;
-    return;
-  }
 
   if (!save_cfg(&mgos_sys_config, &msg)) {
     mg_rpc_send_errorf(ri, -1, "error saving config: %s", (msg ? msg : ""));
@@ -130,6 +114,7 @@ static void mgos_config_save_handler(struct mg_rpc_request_info *ri,
   }
 
   (void) cb_arg;
+  (void) fi;
 }
 
 bool mgos_rpc_service_config_init(void) {
