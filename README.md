@@ -15,7 +15,7 @@ Below is a list of exported RPC methods and arguments:
 ## Config.Get
 Get device configuration subtree. Arguments:
 
-```json
+```javascript
 {
   // Optional. Path to a config object, e.g. `wifi.sta.ssid`.
   // If not specified, a full configuration tree is returned.
@@ -48,7 +48,7 @@ true</code></pre>
 ## Config.Set
 Set device configuration parameters. Arguments:
 
-```json
+```javascript
 {
   // Required. Contains a sparse object with configuration parameters.
   // These parameters are applied on top of the existing device configuration.
@@ -75,7 +75,7 @@ Writes an existing device confuguration on flash, as a sequence of
 (see [description](/docs/core_components/configuration.html)). This makes
 configuration permament, preserved after device reboot. Arguments:
 
-```json
+```javascript
 {
   "reboot": false  // Optional. Whether to reboot the device after the call
 }
