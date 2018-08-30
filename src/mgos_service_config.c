@@ -122,7 +122,7 @@ static void mgos_config_save_handler(struct mg_rpc_request_info *ri,
   ri = NULL;
 
   if (reboot) {
-    mgos_system_restart_after(100);
+    mgos_system_restart_after(500);
   }
 
   (void) cb_arg;
