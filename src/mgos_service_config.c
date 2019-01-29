@@ -94,16 +94,17 @@ static void mgos_config_save_handler(struct mg_rpc_request_info *ri,
    * mg_rpc_send_responsef(), which invalidates `ri`
    */
   char *msg = NULL;
-  int reboot = 0;
+  int try_once = false, reboot = 0;
 
-  if (!save_cfg(&mgos_sys_config, &msg)) {
+  json_scanf(args.p, args.len, ri->args_fmt, &try_once, &reboot);
+
+  if (!mgos_sys_config_save(&mgos_sys_config, try_once, &msg)) {
     mg_rpc_send_errorf(ri, -1, "error saving config: %s", (msg ? msg : ""));
     ri = NULL;
     free(msg);
     return;
   }
 
-  json_scanf(args.p, args.len, ri->args_fmt, &reboot);
 #if CS_PLATFORM == CS_P_ESP8266
   if (reboot && esp_strapping_to_bootloader()) {
     /*
@@ -135,7 +136,7 @@ bool mgos_rpc_service_config_init(void) {
                      NULL);
   mg_rpc_add_handler(c, "Config.Set", "{config: %M}", mgos_config_set_handler,
                      NULL);
-  mg_rpc_add_handler(c, "Config.Save", "{reboot: %B}", mgos_config_save_handler,
-                     NULL);
+  mg_rpc_add_handler(c, "Config.Save", "{try_once: %B, reboot: %B}",
+                     mgos_config_save_handler, NULL);
   return true;
 }
