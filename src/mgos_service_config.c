@@ -33,35 +33,47 @@ static void mgos_config_get_handler(struct mg_rpc_request_info *ri,
                                     void *cb_arg, struct mg_rpc_frame_info *fi,
                                     struct mg_str args) {
   const struct mgos_conf_entry *schema = mgos_config_schema();
+  struct mgos_config *cfg = &mgos_sys_config;
   struct mbuf send_mbuf;
   mbuf_init(&send_mbuf, 0);
 
   char *key = NULL;
-  json_scanf(args.p, args.len, ri->args_fmt, &key);
+  int level = -1;
+  json_scanf(args.p, args.len, ri->args_fmt, &key, &level);
+
   if (key != NULL) {
     schema = mgos_conf_find_schema_entry(key, mgos_config_schema());
     free(key);
     if (schema == NULL) {
       mg_rpc_send_errorf(ri, 404, "invalid config key");
-      return;
+      goto out;
     }
   }
 
-  mgos_conf_emit_cb(&mgos_sys_config, NULL, schema, false, &send_mbuf, NULL,
-                    NULL);
+  if (level >= 0 && level < 9) {
+    cfg = (struct mgos_config *) calloc(1, sizeof(*cfg));
+    if (!mgos_sys_config_load_level(cfg, (enum mgos_config_level) level)) {
+      mg_rpc_send_errorf(ri, 400, "failed to load config");
+      goto out;
+    }
+  }
 
-  /*
-   * TODO(dfrank): figure out why frozen handles %.*s incorrectly here,
-   * fix it, and remove this hack with adding NULL byte
-   */
-  mbuf_append(&send_mbuf, "", 1);
-  mg_rpc_send_responsef(ri, "%s", send_mbuf.buf);
+  mgos_conf_emit_cb(cfg, NULL, schema, false, &send_mbuf, NULL, NULL);
+
+  if (cfg != &mgos_sys_config) {
+    mgos_conf_free(mgos_config_schema(), cfg);
+    cfg = NULL;
+  }
+
+  mg_rpc_send_responsef(ri, "%.*s", (int) send_mbuf.len, send_mbuf.buf);
   ri = NULL;
 
+out:
+  if (cfg != NULL && cfg != &mgos_sys_config) {
+    mgos_conf_free(mgos_config_schema(), cfg);
+  }
   mbuf_free(&send_mbuf);
-
   (void) cb_arg;
-  (void) args;
   (void) fi;
 }
 
@@ -70,35 +82,27 @@ static void mgos_config_get_handler(struct mg_rpc_request_info *ri,
  * JSON as sys config
  */
 static void set_handler(const char *str, int len, void *user_data) {
-  mgos_config_apply_s(mg_mk_str_n(str, len), false);
+  struct mgos_config *cfg = (struct mgos_config *) user_data;
+  char *acl_copy = (mgos_sys_config_get_conf_acl() != NULL
+                        ? strdup(mgos_sys_config_get_conf_acl())
+                        : NULL);
+  mgos_conf_parse(mg_mk_str_n(str, len), acl_copy, mgos_config_schema(), cfg);
+  free(acl_copy);
+}
+
+static void dummy_set_handler(const char *str, int len, void *user_data) {
+  (void) str;
+  (void) len;
   (void) user_data;
 }
 
-/* Handler for Config.Set */
-static void mgos_config_set_handler(struct mg_rpc_request_info *ri,
-                                    void *cb_arg, struct mg_rpc_frame_info *fi,
-                                    struct mg_str args) {
-  json_scanf(args.p, args.len, ri->args_fmt, set_handler, NULL);
-  mg_rpc_send_responsef(ri, NULL);
-  ri = NULL;
-  (void) cb_arg;
-  (void) fi;
-}
-
-/* Handler for Config.Save */
-static void mgos_config_save_handler(struct mg_rpc_request_info *ri,
-                                     void *cb_arg, struct mg_rpc_frame_info *fi,
-                                     struct mg_str args) {
-  /*
-   * We need to stash mg_rpc pointer since we need to use it after calling
-   * mg_rpc_send_responsef(), which invalidates `ri`
-   */
+static void do_save(struct mg_rpc_request_info *ri,
+                    const struct mgos_config *cfg, int level, bool try_once,
+                    bool reboot) {
   char *msg = NULL;
-  int try_once = false, reboot = 0;
 
-  json_scanf(args.p, args.len, ri->args_fmt, &try_once, &reboot);
-
-  if (!mgos_sys_config_save(&mgos_sys_config, try_once, &msg)) {
+  if (!mgos_sys_config_save_level(cfg, (enum mgos_config_level) level, try_once,
+                                  &msg)) {
     mg_rpc_send_errorf(ri, -1, "error saving config: %s", (msg ? msg : ""));
     ri = NULL;
     free(msg);
@@ -118,13 +122,64 @@ static void mgos_config_save_handler(struct mg_rpc_request_info *ri,
   } else
 #endif
   {
-    mg_rpc_send_responsef(ri, NULL);
+    mg_rpc_send_responsef(ri, "{saved: %B}", true);
   }
   ri = NULL;
 
   if (reboot) {
     mgos_system_restart_after(500);
   }
+}
+
+/* Handler for Config.Set */
+static void mgos_config_set_handler(struct mg_rpc_request_info *ri,
+                                    void *cb_arg, struct mg_rpc_frame_info *fi,
+                                    struct mg_str args) {
+  struct mgos_config *cfg = &mgos_sys_config;
+  int level = -1, save = 1, try_once = 0, reboot = 0, dummy;
+  // Parse with dummy config handler first to get other flags.
+  json_scanf(args.p, args.len, ri->args_fmt, dummy_set_handler, NULL, &level,
+             &save, &try_once, &reboot);
+
+  if (level == 0) {
+    mg_rpc_send_errorf(ri, 400, "not allowed");
+    goto out;
+  } else if (level > 0 && level < 9) {
+    cfg = (struct mgos_config *) calloc(1, sizeof(*cfg));
+    if (!mgos_sys_config_load_level(cfg, (enum mgos_config_level) level)) {
+      mg_rpc_send_errorf(ri, 400, "failed to load config");
+      goto out;
+    }
+  } else {
+    cfg = &mgos_sys_config;
+    level = MGOS_CONFIG_LEVEL_USER;
+  }
+
+  json_scanf(args.p, args.len, ri->args_fmt, set_handler, cfg, &dummy, &save,
+             &try_once, &reboot);
+
+  if (save) {
+    do_save(ri, cfg, level, try_once, reboot);
+  } else {
+    mg_rpc_send_responsef(ri, "{saved: %B}", false);
+  }
+
+out:
+  if (cfg != &mgos_sys_config) {
+    mgos_conf_free(mgos_config_schema(), cfg);
+  }
+  (void) cb_arg;
+  (void) fi;
+}
+
+/* Handler for Config.Save */
+static void mgos_config_save_handler(struct mg_rpc_request_info *ri,
+                                     void *cb_arg, struct mg_rpc_frame_info *fi,
+                                     struct mg_str args) {
+  int try_once = false, reboot = 0;
+  json_scanf(args.p, args.len, ri->args_fmt, &try_once, &reboot);
+
+  do_save(ri, &mgos_sys_config, MGOS_CONFIG_LEVEL_USER, try_once, reboot);
 
   (void) cb_arg;
   (void) fi;
@@ -132,10 +187,12 @@ static void mgos_config_save_handler(struct mg_rpc_request_info *ri,
 
 bool mgos_rpc_service_config_init(void) {
   struct mg_rpc *c = mgos_rpc_get_global();
-  mg_rpc_add_handler(c, "Config.Get", "{key: %Q}", mgos_config_get_handler,
-                     NULL);
-  mg_rpc_add_handler(c, "Config.Set", "{config: %M}", mgos_config_set_handler,
-                     NULL);
+  mg_rpc_add_handler(c, "Config.Get", "{key: %Q, level: %d}",
+                     mgos_config_get_handler, NULL);
+  mg_rpc_add_handler(c, "Config.Set",
+                     "{config: %M, level: %d, "
+                     "save: %B, try_once: %B, reboot: %B}",
+                     mgos_config_set_handler, NULL);
   mg_rpc_add_handler(c, "Config.Save", "{try_once: %B, reboot: %B}",
                      mgos_config_save_handler, NULL);
   return true;
