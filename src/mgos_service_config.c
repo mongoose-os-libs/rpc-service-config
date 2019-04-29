@@ -25,7 +25,7 @@
 #include "mgos_utils.h"
 
 #if CS_PLATFORM == CS_P_ESP8266
-#include "fw/platforms/esp8266/src/esp_gpio.h"
+#include "esp_gpio.h"
 #endif
 
 /* Handler for Config.Get */
