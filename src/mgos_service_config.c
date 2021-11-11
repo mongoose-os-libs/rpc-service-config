@@ -58,7 +58,8 @@ static void mgos_config_get_handler(struct mg_rpc_request_info *ri,
     }
   }
 
-  mgos_conf_emit_cb(cfg, NULL, schema, false, &send_mbuf, NULL, NULL);
+  mgos_conf_emit_cb(((char *) cfg) + schema->offset, NULL, schema, false,
+                    &send_mbuf, NULL, NULL);
 
   if (cfg != &mgos_sys_config) {
     mgos_conf_free(mgos_config_schema(), cfg);
