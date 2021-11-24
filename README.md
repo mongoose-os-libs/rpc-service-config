@@ -46,13 +46,22 @@ mos config-get wifi.sta.enable
 true</code></pre>
 
 ## Config.Set
-Set device configuration parameters. Arguments:
+Set device configuration parameters. Arguments, either:
 
 ```javascript
 {
   // Required. Contains a sparse object with configuration parameters.
   // These parameters are applied on top of the existing device configuration.
   "config": { ... }
+}
+```
+
+or
+
+```
+{
+  "key": "debug.level",  // Config key in dotted notation
+  "value": 3,            // Config value, as JSON.
 }
 ```
 

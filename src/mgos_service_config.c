@@ -18,6 +18,7 @@
 #include "mgos_service_config.h"
 #include "mgos_rpc.h"
 
+#include "common/cs_dbg.h"
 #include "common/mg_str.h"
 #include "mgos_config_util.h"
 #include "mgos_hal.h"
@@ -78,25 +79,6 @@ out:
   (void) fi;
 }
 
-/*
- * Called by json_scanf() for the "config" field, and parses all the given
- * JSON as sys config
- */
-static void set_handler(const char *str, int len, void *user_data) {
-  struct mgos_config *cfg = (struct mgos_config *) user_data;
-  char *acl_copy = (mgos_sys_config_get_conf_acl() != NULL
-                        ? strdup(mgos_sys_config_get_conf_acl())
-                        : NULL);
-  mgos_conf_parse(mg_mk_str_n(str, len), acl_copy, mgos_config_schema(), cfg);
-  free(acl_copy);
-}
-
-static void dummy_set_handler(const char *str, int len, void *user_data) {
-  (void) str;
-  (void) len;
-  (void) user_data;
-}
-
 static void do_save(struct mg_rpc_request_info *ri,
                     const struct mgos_config *cfg, int level, bool try_once,
                     bool reboot) {
@@ -136,12 +118,19 @@ static void do_save(struct mg_rpc_request_info *ri,
 static void mgos_config_set_handler(struct mg_rpc_request_info *ri,
                                     void *cb_arg, struct mg_rpc_frame_info *fi,
                                     struct mg_str args) {
-  struct mgos_config *cfg = &mgos_sys_config;
-  int level = -1, save = 1, try_once = 0, reboot = 0, dummy;
-  // Parse with dummy config handler first to get other flags.
-  json_scanf(args.p, args.len, ri->args_fmt, dummy_set_handler, NULL, &level,
+  int level = -1;
+  void *cfgp = NULL;
+  struct mgos_config *cfg = NULL;
+  const struct mgos_conf_entry *schema = NULL;
+  struct json_token value = JSON_INVALID_TOKEN;
+  char *key = NULL, *err_msg = NULL;
+  bool save = false, try_once = false, reboot = false, free_config = false;
+  json_scanf(args.p, args.len, ri->args_fmt, &key, &value, &value, &level,
              &save, &try_once, &reboot);
-
+  if (value.len == 0) {
+    mg_rpc_send_errorf(ri, 400, "%s is required", "value");
+    goto out;
+  }
   if (level == 0) {
     mg_rpc_send_errorf(ri, 400, "not allowed");
     goto out;
@@ -151,13 +140,39 @@ static void mgos_config_set_handler(struct mg_rpc_request_info *ri,
       mg_rpc_send_errorf(ri, 400, "failed to load config");
       goto out;
     }
+    free_config = true;
   } else {
     cfg = &mgos_sys_config;
     level = MGOS_CONFIG_LEVEL_USER;
   }
 
-  json_scanf(args.p, args.len, ri->args_fmt, set_handler, cfg, &dummy, &save,
-             &try_once, &reboot);
+  if (key != NULL) {
+    schema = mgos_conf_find_schema_entry(key, mgos_config_schema());
+    if (schema == NULL) {
+      mg_rpc_send_errorf(ri, 404, "invalid config key");
+      goto out;
+    }
+    cfgp = ((char *) cfg) + schema->offset;
+  } else {
+    schema = mgos_config_schema();
+    cfgp = cfg;
+  }
+
+  /* Include the quotes around the string value. */
+  if (value.type == JSON_TYPE_STRING) {
+    value.ptr--;
+    value.len += 2;
+  }
+  LOG(LL_DEBUG, ("key: '%s' value '%.*s'", key, (int) value.len, value.ptr));
+
+  /* Note that we always use top-level ACL as it may be
+   * more restrictive than on lower levels. */
+  if (!mgos_conf_parse_sub_msg(mg_mk_str_n(value.ptr, value.len), schema,
+                               mgos_sys_config_get_conf_acl(), cfgp,
+                               &err_msg)) {
+    mg_rpc_send_errorf(ri, 400, "invalid config value: %s", err_msg);
+    goto out;
+  }
 
   if (save) {
     do_save(ri, cfg, level, try_once, reboot);
@@ -166,9 +181,11 @@ static void mgos_config_set_handler(struct mg_rpc_request_info *ri,
   }
 
 out:
-  if (cfg != &mgos_sys_config) {
+  if (free_config) {
     mgos_conf_free(mgos_config_schema(), cfg);
   }
+  free(err_msg);
+  free(key);
   (void) cb_arg;
   (void) fi;
 }
@@ -190,8 +207,9 @@ bool mgos_rpc_service_config_init(void) {
   struct mg_rpc *c = mgos_rpc_get_global();
   mg_rpc_add_handler(c, "Config.Get", "{key: %Q, level: %d}",
                      mgos_config_get_handler, NULL);
+  /* value is a synonym for config. */
   mg_rpc_add_handler(c, "Config.Set",
-                     "{config: %M, level: %d, "
+                     "{key: %Q, config: %T, value: %T, level: %d, "
                      "save: %B, try_once: %B, reboot: %B}",
                      mgos_config_set_handler, NULL);
   mg_rpc_add_handler(c, "Config.Save", "{try_once: %B, reboot: %B}",
