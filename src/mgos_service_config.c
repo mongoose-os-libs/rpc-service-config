@@ -163,7 +163,8 @@ static void mgos_config_set_handler(struct mg_rpc_request_info *ri,
     value.ptr--;
     value.len += 2;
   }
-  LOG(LL_DEBUG, ("key: '%s' value '%.*s'", key, (int) value.len, value.ptr));
+  LOG(LL_DEBUG, ("key: '%s' value '%.*s'", (key != NULL) ? key : "",
+                 (int) value.len, value.ptr));
 
   /* Note that we always use top-level ACL as it may be
    * more restrictive than on lower levels. */
